@@ -23,7 +23,7 @@ best_acc = 0.0
 parser = argparse.ArgumentParser(description='PyTorch CIFAR10 Training Extration features')
 parser.add_argument("--fold", required=True, type=str, help="folds")
 parser.add_argument("--train", required=True, type=str, help="path train")
-parser.add_argument("--val", required=True, type=str, help="path val")
+parser.add_argument("--val", required=False, type=str, help="path val")
 parser.add_argument("--test", required=True, type=str, help="path test")
 parser.add_argument('--batch_size', default=32, type=int, help='batch_size')
 parser.add_argument('--epoch', default=200, type=int, help='you need in the epoch')
@@ -89,8 +89,8 @@ if device == 'cuda':
     cudnn.benchmark = True
 
 criterion_cnn = nn.CrossEntropyLoss()
-#optimizer_cnn = optim.SGD(model.parameters(), lr=0.001 ,momentum=0.9) #weight_decay=5e-4
-optimizer_cnn = optim.Adam(net.parameters(), lr=0.0001)
+optimizer_cnn = optim.SGD(model.parameters(), lr=0.0001 ,momentum=0.9) #weight_decay=5e-4
+#optimizer_cnn = optim.Adam(net.parameters(), lr=0.0001)
 
 """
 Training
@@ -157,17 +157,14 @@ def fatureEx_(data,model):
 
     fe_ = []
     label_= []
-
-    #feature_extractor = torch.nn.Sequential(*list(model.children())[:-1])
-    #feature_extractor = feature_extractor.to(device)
-    #model.fc = nn.Linear(net.fc.in_features, 2048)
-    #feature_extractor = model.to(device)
     
-    modules_fe = list(model.children())[:-1]
-    modules_fe.append(nn.Flatten())
-    modules_fe.append(nn.Linear(2048,2048))
-    net_ = nn.Sequential(*modules_fe)
-    feature_extractor = net_.to(device)
+    #for param in model_.parameters():
+       # param.requires_grad = False
+
+    model.fc = nn.Linear(2048, 2048)
+    feature_extractor = model.to(device)
+
+    print(feature_extractor)
 
     with torch.no_grad():
         for batch_idx, (inputs, targets) in enumerate(data):
@@ -196,7 +193,7 @@ def unmount_batch_v2(feature_t,true_l):
 
 
 def save_model(model):
-    torch.save(model.state_dict(), seed+"_model.pt")
+    torch.save(model.state_dict(), "results/"+seed+"_model.pt")
 
 """
 Main
@@ -213,19 +210,20 @@ def main():
 
 
 
-    model.load_state_dict(torch.load(seed+"_model.pt",map_location=device)) # carregar o modelo treinado "CNN"
+    model.load_state_dict(torch.load("results/"+seed+"_model.pt",map_location=device)) # carregar o modelo treinado "CNN"
 
     fe_train_s, label_train_s = fatureEx_(train_loader,model)
     feature_t, label_t = unmount_batch_v2(fe_train_s, label_train_s)
-    np.savez(seed+'_train', feature_t,label_t)
+    np.savez("results/"+seed+'_train', feature_t,label_t)
 
     fe_test_s, label_test_s = fatureEx_(test_loader,model)
     feature_tt, label_tt = unmount_batch_v2(fe_test_s, label_test_s)
-    np.savez(seed+'_test', feature_tt,label_tt)
+    np.savez("results/"+seed+'_test', feature_tt,label_tt)
 
     fe_val_s, label_val_s = fatureEx_(val_loader,model)
     feature_val, label_val = unmount_batch_v2(fe_val_s, label_val_s)
-    np.savez(seed+'_val', feature_val,label_val)
+    print(feature_val.shape)
+    np.savez("results/"+seed+'_val', feature_val,label_val)
  
 
 
