@@ -1,1 +1,1 @@
-# Resnet50_train_cnn_feratures_extration
+#Train cnn Resnet50 features extration
