@@ -22,7 +22,7 @@ best_acc = 0.0
 
 parser = argparse.ArgumentParser(description='PyTorch CIFAR10 Training Extration features')
 parser.add_argument("--fold", required=True, type=str, help="folds")
-parser.add_argument("--train", required=True, type=str, help="path train")
+parser.add_argument("--train", required=False, type=str, help="path train")
 parser.add_argument("--val", required=True, type=str, help="path val")
 parser.add_argument("--test", required=True, type=str, help="path test")
 parser.add_argument('--batch_size', default=32, type=int, help='batch_size')
@@ -33,6 +33,10 @@ args = parser.parse_args()
 writer = SummaryWriter()
 
 seed = "Resnet50_fold"+str(args.fold)
+
+result_model = list()
+result_model.append("SEED::  "+str(seed)+ "\n")
+result_model.append("============================= \n")
 
 print('==> Preparing data..')
 transform_train = transforms.Compose([
@@ -124,6 +128,24 @@ def train(epoch):
 val
 """
 
+def val():
+    global best_acc
+    net.eval()
+    test_loss = 0
+    correct = 0
+    total = 0
+    with torch.no_grad():
+        for batch_idx, (inputs, targets) in enumerate(val_loader):
+            inputs, targets = inputs.to(device), targets.to(device)
+            outputs = net(inputs)
+
+            _, predicted = outputs.max(1)
+            total += targets.size(0)
+            correct += predicted.eq(targets).sum().item()
+
+    acc = 100.*correct/total
+    print("ACC_test",acc)
+    return acc
 
 """
 Test
@@ -158,16 +180,17 @@ def fatureEx_(data,model):
     fe_ = []
     label_= []
 
-    modules_fe = list(model.children())[:-1]
-    modules_fe.append(nn.Flatten())
-    modules_fe.append(nn.Linear(2048,2048))
-    net_ = nn.Sequential(*modules_fe)
-    feature_extractor = net_.to(device)
+    #modules_fe = list(model.children())[:-2]
+    #modules_fe.append(nn.Flatten())
+    #modules_fe.append(nn.Linear(2048,2048))
+    #net_ = nn.Sequential(*modules_fe)
+    #feature_extractor = net_.to(device)
 
-    #feature_extractor = torch.nn.Sequential(*list(model.children())[:-1])
-    #feature_extractor = feature_extractor.to(device)
-    #model.fc = nn.Linear(net.fc.in_features, 2048)
-    #feature_extractor = net.to(device)
+    feature_extractor = torch.nn.Sequential(*list(model.children())[:-1])
+    feature_extractor = feature_extractor.to(device)
+    model.fc = nn.Linear(2048, 2048)
+    feature_extractor = net.to(device)
+
     with torch.no_grad():
         for batch_idx, (inputs, targets) in enumerate(data):
             inputs, targets = inputs.to(device), targets.to(device)
@@ -202,31 +225,38 @@ Main
 """
 
 def main():
-    print("test with pre treining on cifar10 or cifar 100")
     for epoch in range(0, args.epoch):
         train(epoch)
         acc = test()
         if(acc > best_acc):
             print("save modelo")
             save_model(net)
+    
+    acc_val = val()
 
 
 
     #model = net.load_state_dict(torch.load(seed+"_model.pt",map_location=device)) # carregar o modelo treinado "CNN"
 
-    fe_train_s, label_train_s = fatureEx_(train_loader,model)
+    fe_train_s, label_train_s = fatureEx_(train_loader,net)
     feature_t, label_t = unmount_batch_v2(fe_train_s, label_train_s)
     np.savez(seed+'_train', feature_t,label_t)
 
-    fe_test_s, label_test_s = fatureEx_(test_loader,model)
+    fe_test_s, label_test_s = fatureEx_(test_loader,net)
     feature_tt, label_tt = unmount_batch_v2(fe_test_s, label_test_s)
     np.savez(seed+'_test', feature_tt,label_tt)
 
-    fe_val_s, label_val_s = fatureEx_(val_loader,model)
+    fe_val_s, label_val_s = fatureEx_(val_loader,net)
     feature_val, label_val = unmount_batch_v2(fe_val_s, label_val_s)
     np.savez(seed+'_val', feature_val,label_val)
  
+    result_model.append("============================= \n")
+    result_model.append("AAC_test::  "+str(best_acc)+ "\n")
+    result_model.append("AAC_val::  "+str(acc_val)+ "\n")
 
+    arquivo = open(seed+".txt", "a")
+    arquivo.writelines(result_model)
+    arquivo.close()
 
 if __name__ == '__main__':
     main()
