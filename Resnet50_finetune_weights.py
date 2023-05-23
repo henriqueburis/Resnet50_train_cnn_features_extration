@@ -163,7 +163,7 @@ def val():
             correct += predicted.eq(targets).sum().item()
 
     acc = 100.*correct/total
-    print("ACC_test",acc)
+    print("ACC_Val",acc)
     return acc
 
 """
@@ -193,22 +193,11 @@ def test():
 """
 Feature extration
 """
-def fatureEx_(data,model):
+def fatureEx_(data,feature_extractor):
     net.eval()
 
     fe_ = []
     label_= []
-
-    #modules_fe = list(model.children())[:-2]
-    #modules_fe.append(nn.Flatten())
-    #modules_fe.append(nn.Linear(2048,2048))
-    #net_ = nn.Sequential(*modules_fe)
-    #feature_extractor = net_.to(device)
-
-    feature_extractor = torch.nn.Sequential(*list(model.children())[:-1])
-    feature_extractor = feature_extractor.to(device)
-    model.fc = nn.Linear(2048, 2048)
-    feature_extractor = net.to(device)
 
     with torch.no_grad():
         for batch_idx, (inputs, targets) in enumerate(data):
@@ -217,24 +206,12 @@ def fatureEx_(data,model):
             fe_.append(outputs_fe.data.cpu().numpy())
             label_.append(targets.data.cpu().numpy())
     
-    return fe_, label_
+    return np.concatenat(fe_), np.concatenate(label_)
 
 
 """
 Utils
 """
-
-def unmount_batch_v2(feature_t,true_l):
-  feature_img_label = []
-  feature = []
-  true_label = []
-  for i in range(len(feature_t)):
-    for j in range(len(feature_t[i])):
-      feature.append(feature_t[i][j])
-      true_label.append(true_l[i][j])
-  return np.array(feature),np.array(true_label)
-
-
 
 def save_model(model):
     torch.save(model.state_dict(), seed+"_model.pt")
@@ -244,10 +221,12 @@ Main
 """
 
 def main():
+    acc_geral = -1
     for epoch in range(0, args.epoch):
         train(epoch)
         acc = test()
-        if(acc > best_acc):
+        if(acc > acc_geral):
+            acc_geral = acc
             print("save modelo")
             save_model(net)
     
@@ -257,17 +236,22 @@ def main():
 
     #model = net.load_state_dict(torch.load(seed+"_model.pt",map_location=device)) # carregar o modelo treinado "CNN"
 
+    
+    modules_fe = list(model.children())[:-1]
+    #modules_fe.append(nn.Flatten())
+    modules_fe.append(nn.Linear(2048,2048))
+    net_ = nn.Sequential(*modules_fe)
+    feature_extractor = net_.to(device)
+
+
     fe_train_s, label_train_s = fatureEx_(train_loader,net)
-    feature_t, label_t = unmount_batch_v2(fe_train_s, label_train_s)
-    np.savez(seed+'_train', feature_t,label_t)
+    np.savez(seed+'_train', fe_train_s, label_train_s)
 
     fe_test_s, label_test_s = fatureEx_(test_loader,net)
-    feature_tt, label_tt = unmount_batch_v2(fe_test_s, label_test_s)
-    np.savez(seed+'_test', feature_tt,label_tt)
+    np.savez(seed+'_test',  fe_test_s, label_test_s)
 
     fe_val_s, label_val_s = fatureEx_(val_loader,net)
-    feature_val, label_val = unmount_batch_v2(fe_val_s, label_val_s)
-    np.savez(seed+'_val', feature_val,label_val)
+    np.savez(seed+'_val', fe_val_s, label_val_s)
  
     result_model.append("============================= \n")
     result_model.append("AAC_test::  "+str(best_acc)+ "\n")
