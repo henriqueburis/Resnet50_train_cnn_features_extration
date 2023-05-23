@@ -20,7 +20,7 @@ from tqdm import tqdm
 
 best_acc = 0.0
 
-parser = argparse.ArgumentParser(description='PyTorch CIFAR10 Training Extration features')
+parser = argparse.ArgumentParser(description='PyTorch FineTune CIFAR10 Training Extration features')
 parser.add_argument("--fold", required=True, type=str, help="folds")
 parser.add_argument("--train", required=True, type=str, help="path train")
 parser.add_argument("--val", required=False, type=str, help="path val")
@@ -33,6 +33,11 @@ args = parser.parse_args()
 writer = SummaryWriter()
 
 seed = "Resnet50_finetune_fold"+str(args.fold)
+
+result_model = list()
+result_model.append("SEED::  "+str(seed)+ "\n")
+result_model.append("============================= \n")
+
 
 print('==> Preparing data..')
 transform_train = transforms.Compose([
@@ -89,8 +94,8 @@ if device == 'cuda':
     cudnn.benchmark = True
 
 criterion_cnn = nn.CrossEntropyLoss()
-optimizer_cnn = optim.SGD(model.parameters(), lr=0.0001 ,momentum=0.9) #weight_decay=5e-4
-#optimizer_cnn = optim.Adam(net.parameters(), lr=0.0001)
+#optimizer_cnn = optim.SGD(model.parameters(), lr=0.0001 ,momentum=0.9) #weight_decay=5e-4
+optimizer_cnn = optim.Adam(net.parameters(), lr=0.001)
 
 """
 Training
@@ -124,6 +129,25 @@ def train(epoch):
 val
 """
 
+def val():
+    global best_acc
+    model.eval()
+    test_loss = 0
+    correct = 0
+    total = 0
+    with torch.no_grad():
+        for batch_idx, (inputs, targets) in enumerate(val_loader):
+            inputs, targets = inputs.to(device), targets.to(device)
+            outputs = net(inputs)
+
+            _, predicted = outputs.max(1)
+            total += targets.size(0)
+            correct += predicted.eq(targets).sum().item()
+
+    acc = 100.*correct/total
+    print("ACC_val",acc)
+    return acc
+
 
 """
 Test
@@ -152,7 +176,7 @@ def test():
 """
 Feature extration
 """
-def fatureEx_(data,model):
+def fatureEx_(data,feature_extractor):
     model.eval()
 
     fe_ = []
@@ -161,10 +185,10 @@ def fatureEx_(data,model):
     #for param in model_.parameters():
        # param.requires_grad = False
 
-    model.fc = nn.Linear(2048, 2048)
-    feature_extractor = model.to(device)
+    #model.fc = nn.Linear(2048, 2048)
+    #feature_extractor = model.to(device)
 
-    print(feature_extractor)
+    #print(feature_extractor)
 
     with torch.no_grad():
         for batch_idx, (inputs, targets) in enumerate(data):
@@ -173,24 +197,12 @@ def fatureEx_(data,model):
             fe_.append(outputs_fe.data.cpu().numpy())
             label_.append(targets.data.cpu().numpy())
     
-    return fe_, label_
+    return np.concatenat(fe_), np.concatenate(label_)
 
 
 """
 Utils
 """
-
-def unmount_batch_v2(feature_t,true_l):
-  feature_img_label = []
-  feature = []
-  true_label = []
-  for i in range(len(feature_t)):
-    for j in range(len(feature_t[i])):
-      feature.append(feature_t[i][j])
-      true_label.append(true_l[i][j])
-  return np.array(feature),np.array(true_label)
-
-
 
 def save_model(model):
     torch.save(model.state_dict(), "results/"+seed+"_model.pt")
@@ -208,23 +220,38 @@ def main():
             print("save modelo")
             save_model(model)
 
+    acc = test()
+    acc_val = val()
+
+    #model.load_state_dict(torch.load("results/"+seed+"_model.pt",map_location=device)) # carregar o modelo treinado "CNN"
+
+    modules_fe = list(model.children())[:-1]
+    #modules_fe.append(nn.Flatten())
+    modules_fe.append(nn.Linear(2048,2048))
+    net_ = nn.Sequential(*modules_fe)
+    feature_extractor = net_.to(device)
+
+    print(feature_extractor)
 
 
-    model.load_state_dict(torch.load("results/"+seed+"_model.pt",map_location=device)) # carregar o modelo treinado "CNN"
 
-    fe_train_s, label_train_s = fatureEx_(train_loader,model)
-    feature_t, label_t = unmount_batch_v2(fe_train_s, label_train_s)
-    np.savez("results/"+seed+'_train', feature_t,label_t)
+    fe_train_s, label_train_s = fatureEx_(train_loader,feature_extractor)
+    np.savez("results/"+seed+'_train', fe_train_s,label_train_s)
 
-    fe_test_s, label_test_s = fatureEx_(test_loader,model)
-    feature_tt, label_tt = unmount_batch_v2(fe_test_s, label_test_s)
-    np.savez("results/"+seed+'_test', feature_tt,label_tt)
+    fe_test_s, label_test_s = fatureEx_(test_loader,feature_extractor)
+    np.savez("results/"+seed+'_test', fe_test_s,label_test_s)
 
-    fe_val_s, label_val_s = fatureEx_(val_loader,model)
-    feature_val, label_val = unmount_batch_v2(fe_val_s, label_val_s)
-    print(feature_val.shape)
-    np.savez("results/"+seed+'_val', feature_val,label_val)
+    fe_val_s, label_val_s = fatureEx_(val_loader,feature_extractor)
+    np.savez("results/"+seed+'_val', fe_val_s,label_val_s)
  
+    result_model.append("============================= \n")
+    result_model.append("AAC_test::  "+str(acc)+ "\n")
+    result_model.append("AAC_val::  "+str(acc_val)+ "\n")
+
+    arquivo = open(seed+".txt", "a")
+    arquivo.writelines(result_model)
+    arquivo.close()
+
 
 
 if __name__ == '__main__':
